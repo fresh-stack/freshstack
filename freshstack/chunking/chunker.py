@@ -3,6 +3,8 @@ Chunker abstraction and implementations.
 Implementation originally taken from https://github.com/Storia-AI/repo2vec.
 """
 
+from __future__ import annotations
+
 import logging
 from abc import ABC, abstractmethod
 from collections.abc import Callable
@@ -26,6 +28,7 @@ TokenizerFunc = Callable[[str], list]
 
 class Chunk:
     """Abstract class for a chunk of code or text to be indexed."""
+
     @abstractmethod
     def content(self) -> str:
         """The content of the chunk to be indexed."""
@@ -39,7 +42,7 @@ class Chunk:
 class FileChunk(Chunk):
     """A chunk of code or text extracted from a file in the repository."""
 
-    file_content: str    # The content of the entire file, not just this chunk.
+    file_content: str  # The content of the entire file, not just this chunk.
     file_metadata: dict  # Metadata of the entire file, not just this chunk.
     start_byte: int
     end_byte: int
@@ -159,11 +162,7 @@ class CodeFileChunker(Chunker):
                 # There's a good chance that merging these two chunks will be under the token limit. We're not 100% sure
                 # at this point, because tokenization is not necessarily additive.
                 merged = FileChunk(
-                    file_content,
-                    file_metadata,
-                    merged_chunks[-1].start_byte,
-                    chunk.end_byte,
-                    self.tokenizer_func
+                    file_content, file_metadata, merged_chunks[-1].start_byte, chunk.end_byte, self.tokenizer_func
                 )
                 if merged.num_tokens <= self.max_tokens:
                     merged_chunks[-1] = merged
@@ -225,7 +224,9 @@ class CodeFileChunker(Chunker):
         for chunk in file_chunks:
             # Make sure that the chunk has content and doesn't exceed the max_tokens limit. Otherwise there must be
             # a bug in the code.
-            assert chunk.num_tokens <= self.max_tokens, f"Chunk size {chunk.num_tokens} exceeds max_tokens {self.max_tokens}."
+            assert (
+                chunk.num_tokens <= self.max_tokens
+            ), f"Chunk size {chunk.num_tokens} exceeds max_tokens {self.max_tokens}."
 
         return file_chunks
 
@@ -264,9 +265,11 @@ class TextFileChunker(Chunker):
                 logging.warning("Couldn't find semchunk in content: %s", text_chunk)
             else:
                 end = start + len(text_chunk)
+
                 # Pass the tokenizer function to the FileChunk
                 def tokenizer_func(x):
                     return self.count_tokens(x)
+
                 file_chunks.append(FileChunk(file_content, file_metadata, start, end, tokenizer_func))
 
             start = end if start != -1 else 0
@@ -318,7 +321,10 @@ class UniversalFileChunker(Chunker):
                        - A tokenizer object with an encode method
         """
         if tokenizer is None:
-            logging.info("Initializing UniversalFileChunker with max_tokens=%d with default tokenizer: cl100k_base", max_tokens)
+            logging.info(
+                "Initializing UniversalFileChunker with max_tokens=%d with default tokenizer: cl100k_base", max_tokens
+            )
+
             # Default tokenizer
             def tokenizer_func(x):
                 return DEFAULT_TOKENIZER.encode(x, disallowed_special=())
@@ -326,15 +332,18 @@ class UniversalFileChunker(Chunker):
             logging.info(f"Using tiktoken encoding: {tokenizer}")
             # String identifier for tiktoken
             tk = tiktoken.get_encoding(tokenizer)
+
             def tokenizer_func(x):
                 return tk.encode(x, disallowed_special=())
-        elif hasattr(tokenizer, 'encode'):
+        elif hasattr(tokenizer, "encode"):
             logging.info("Using custom tokenizer with encode method with HF.")
+
             # Has encode method (like HF tokenizers)
             def tokenizer_func(x):
                 return tokenizer.encode(x)
         else:
             logging.warning(f"Unrecognized tokenizer type: {type(tokenizer)}. Using default.")
+
             def tokenizer_func(x):
                 return DEFAULT_TOKENIZER.encode(x, disallowed_special=())
 
@@ -360,7 +369,6 @@ class UniversalFileChunker(Chunker):
 
 
 if __name__ == "__main__":
-
     metadata = {"file_path": "example.py"}
     content = """import py7zr
     from lxml import etree
@@ -372,18 +380,18 @@ if __name__ == "__main__":
     """
 
     # Example usage with default tokenizer
-    chunker1 = UniversalFileChunker(max_tokens=50) # default tokenizer is tiktoken's cl100k_base
+    chunker1 = UniversalFileChunker(max_tokens=50)  # default tokenizer is tiktoken's cl100k_base
     chunks = chunker1.chunk(content, metadata)
     print("Chunks using default tokenizer: cl100k_base with max_tokens=50")
     for chunk in chunks:
-        print(chunk.metadata['id'], chunk.file_content[chunk.start_byte: chunk.end_byte])
+        print(chunk.metadata["id"], chunk.file_content[chunk.start_byte : chunk.end_byte])
 
     # Example usage with custom tiktoken encoding
     chunker2 = UniversalFileChunker(max_tokens=50, tokenizer="o200k_base")
     chunks = chunker2.chunk(content, metadata)
     print("\nChunks using custom tokenizer: o200k_base with max_tokens=50")
     for chunk in chunks:
-        print(chunk.metadata['id'], chunk.file_content[chunk.start_byte: chunk.end_byte])
+        print(chunk.metadata["id"], chunk.file_content[chunk.start_byte : chunk.end_byte])
 
     # Example with HuggingFace tokenizer
     hf_tokenizer = AutoTokenizer.from_pretrained("gpt2")
@@ -391,5 +399,4 @@ if __name__ == "__main__":
     chunks = chunker3.chunk(content, metadata)
     print("\nChunks using HuggingFace gpt2 tokenizer with max_tokens=50")
     for chunk in chunks:
-        print(chunk.metadata['id'], chunk.file_content[chunk.start_byte: chunk.end_byte])
-
+        print(chunk.metadata["id"], chunk.file_content[chunk.start_byte : chunk.end_byte])

@@ -1,4 +1,7 @@
 """Module for chunking GitHub repositories into smaller text segments."""
+
+from __future__ import annotations
+
 import json
 import os
 import pathlib
@@ -13,7 +16,7 @@ class GitHubRepoChunker:
     """
     A class for downloading and chunking GitHub repositories into manageable text segments.
     """
-    
+
     def __init__(
         self,
         repo_id: str,
@@ -25,7 +28,7 @@ class GitHubRepoChunker:
         excluded_extensions: set[str] | None = None,
         max_tokens: int = 2048,
         max_chunks_allowed: int = 100,
-        max_chunk_characters: int = 1000000
+        max_chunk_characters: int = 1000000,
     ):
         """
         Initialize the GitHubRepoChunker.
@@ -55,24 +58,22 @@ class GitHubRepoChunker:
         self.max_tokens = max_tokens
         self.max_chunks_allowed = max_chunks_allowed
         self.max_chunk_characters = max_chunk_characters
-        
+
         # Initialize components
         self.github_repo = GitHubRepoManager(
             repo_id=self.repo_id,
             local_dir=self.local_dir,
             included_extensions=self.included_extensions,
-            excluded_extensions=self.excluded_extensions
+            excluded_extensions=self.excluded_extensions,
         )
-        
+
         self.chunker = UniversalFileChunker(max_tokens=self.max_tokens)
-    
+
     def _clean_content(self, content: str) -> str:
         """
         Clean the content by removing binary data embedded in text.
-        
         Args:
             content: The content to clean
-            
         Returns:
             Cleaned content
         """
@@ -81,88 +82,89 @@ class GitHubRepoChunker:
             for _ in range(3):
                 pattern = r'"(?:image\/png|image\/jpeg)":\s*"([^"]*)"'
                 content = re.sub(pattern, '""', content, re.DOTALL)
-        
+
         # Remove base64 encoded data (video/mp4, image/jpeg, image/png, audio/x-wav)
-        if any(keyword in content for keyword in [
-            "data:video/mp4;base64,", 
-            "data:image/jpeg;base64,",
-            "data:image/png;base64,", 
-            "data:audio/x-wav;base64"
-        ]):
+        if any(
+            keyword in content
+            for keyword in [
+                "data:video/mp4;base64,",
+                "data:image/jpeg;base64,",
+                "data:image/png;base64,",
+                "data:audio/x-wav;base64",
+            ]
+        ):
             for _ in range(3):
                 pattern = r'"data:(?:video/mp4|image/jpeg|image/png|audio/x-wav);base64,([^"]+)"'
                 content = re.sub(pattern, '""', content, re.DOTALL)
-                
+
         return content
-    
+
     def download(self) -> None:
         """Download the GitHub repository"""
         self.github_repo.download()
-    
+
     def process(self) -> str:
         """
         Process the repository, chunking all files and writing to output.
-        
         Returns:
             Path to the output file
         """
         # Create output directory if it doesn't exist
         os.makedirs(self.output_dir, exist_ok=True)
         output_path = os.path.join(self.output_dir, self.output_filename)
-        
+
         # Get approximate file count for progress bar
         github_path = pathlib.Path(os.path.join(self.local_dir, self.repo_id))
         num_files = sum(1 for _ in github_path.rglob("*") if _.is_file())
-        
+
         # Process all files
-        with open(output_path, 'w') as fout:
+        with open(output_path, "w") as fout:
             for content, metadata in tqdm(self.github_repo.walk(), total=num_files, desc="Chunking files"):
                 # Clean content
                 content = self._clean_content(content)
-                
+
                 # Skip if content is too large
                 if len(content) >= self.max_chunk_characters:
                     continue
-                
+
                 # Chunk the content
                 try:
                     chunks = self.chunker.chunk(content, metadata)
-                    
+
                     # Only process if within chunk limit
                     if len(chunks) <= self.max_chunks_allowed:
                         for chunk in chunks:
-                            chunk_text = chunk.file_content[chunk.start_byte:chunk.end_byte]
-                            
+                            chunk_text = chunk.file_content[chunk.start_byte : chunk.end_byte]
+
                             # Skip empty chunks
                             if chunk_text.strip() == "":
                                 continue
-                                
+
                             # Create document
                             document = {
-                                "_id": chunk.metadata['id'].replace(self.repo_id + "/", ""),
+                                "_id": chunk.metadata["id"].replace(self.repo_id + "/", ""),
                                 "title": "",
                                 "text": chunk_text,
                                 "metadata": {
-                                    "url": chunk.file_metadata['url'],
+                                    "url": chunk.file_metadata["url"],
                                     "start_byte": chunk.start_byte,
                                     "end_byte": chunk.end_byte,
-                                }
+                                },
                             }
-                            
+
                             # Write to output
-                            fout.write(json.dumps(document, ensure_ascii=False) + '\n')
+                            fout.write(json.dumps(document, ensure_ascii=False) + "\n")
                             fout.flush()
-                
+
                 except Exception as e:
                     print(f"Error chunking content: {e}")
                     continue
-        
+
         return output_path
-    
+
     def run(self) -> str:
         """
         Download and process the repository.
-        
         Returns:
             Path to the output file
         """
@@ -170,7 +172,7 @@ class GitHubRepoChunker:
         return self.process()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     import argparse
 
     parser = argparse.ArgumentParser(description="Chunk GitHub repositories into text segments")
@@ -183,15 +185,19 @@ if __name__ == '__main__':
     parser.add_argument("--output_dir", type=str, default="/tmp/", help="Output directory")
     parser.add_argument("--output_filename", type=str, default="corpus.jsonl", help="Output filename")
     parser.add_argument("--max_chunks_allowed", type=int, default=100, help="Maximum chunks allowed per file")
-    parser.add_argument("--max_chunk_characters", type=int, default=1000000, 
-                        help="Maximum characters in a chunk, else Rust will panic")
+    parser.add_argument(
+        "--max_chunk_characters", type=int, default=1000000, help="Maximum characters in a chunk, else Rust will panic"
+    )
 
     args = parser.parse_args()
 
     # Convert list arguments to sets if provided
     included_extensions = set(args.included_extensions) if args.included_extensions else None
-    excluded_extensions = set(args.excluded_extensions) if args.excluded_extensions else \
-        {".png", ".gif", ".bin", ".jpg", ".jpeg", ".mp4", ".csv", ".json"}
+    excluded_extensions = (
+        set(args.excluded_extensions)
+        if args.excluded_extensions
+        else {".png", ".gif", ".bin", ".jpg", ".jpeg", ".mp4", ".csv", ".json"}
+    )
 
     # Initialize and run the chunker
     chunker = GitHubRepoChunker(
@@ -204,7 +210,7 @@ if __name__ == '__main__':
         excluded_extensions=excluded_extensions,
         max_tokens=args.max_tokens,
         max_chunks_allowed=args.max_chunks_allowed,
-        max_chunk_characters=args.max_chunk_characters
+        max_chunk_characters=args.max_chunk_characters,
     )
 
     output_path = chunker.run()

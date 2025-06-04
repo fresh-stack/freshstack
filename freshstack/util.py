@@ -1,9 +1,55 @@
+from __future__ import annotations
+
 import json
 import logging
 import os
 import re
+from collections import Counter
+
+import py7zr
 
 logger = logging.getLogger(__name__)
+
+
+def extract_7z(archive_path, extract_to="."):
+    """Extract a 7z archive to the specified directory."""
+    with py7zr.SevenZipFile(archive_path, mode="r") as z:
+        z.extractall(path=extract_to)
+
+
+def _get_top_k_tags(input_filepath: str, top_k: int = 25) -> list[tuple[str, int]]:
+    """
+    Read a JSONL file (one JSON object per line, each with a 'tags' list),
+    count all tags, and return the top_k most common as (tag, count) pairs.
+    """
+    tags = Counter()
+    with open(input_filepath, encoding="utf-8") as fin:
+        for line in fin:
+            row = json.loads(line)
+            # Ensure 'tags' is a list before updating the Counter
+            if "tags" in row and isinstance(row["tags"], list):
+                tags.update(row["tags"])
+    return tags.most_common(top_k)
+
+
+def _write_top_k_tags(tag_counts: list[tuple[str, int]], output_filepath: str) -> str:
+    """
+    Write a list of (tag, count) pairs to a file, one per line,
+    as tab-separated values. Returns the output_filepath.
+    """
+    with open(output_filepath, "w", encoding="utf-8") as fout:
+        for tag, count in tag_counts:
+            fout.write(f"{tag}\t{count}\n")
+    return output_filepath
+
+
+def extract_top_k_tags(input_filepath: str, output_filepath: str, top_k: int = 25) -> str:
+    """
+    Full pipeline: read input_filepath, get its top_k tags,
+    write them to output_filepath. Returns the path written.
+    """
+    tag_counts = _get_top_k_tags(input_filepath, top_k)
+    return _write_top_k_tags(tag_counts, output_filepath)
 
 
 def merge_corpus(
@@ -34,11 +80,7 @@ def merge_corpus(
         output_filename = os.path.join(input_dir, exclude_filename)
 
     # list all .jsonl files except the final corpus
-    input_files: list[str] = [
-        f
-        for f in os.listdir(input_dir)
-        if f.endswith(".jsonl") and f != exclude_filename
-    ]
+    input_files: list[str] = [f for f in os.listdir(input_dir) if f.endswith(".jsonl") and f != exclude_filename]
 
     pattern = re.compile(file_pattern)
 

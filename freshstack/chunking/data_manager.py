@@ -1,12 +1,16 @@
+from __future__ import annotations
+
 import logging
 import os
 from abc import abstractmethod
+from collections.abc import Generator
 from functools import cached_property
-from typing import Any, Dict, Generator, Tuple
+from typing import Any
 
-import requests
 import pymupdf4llm
+import requests
 from git import GitCommandError, Repo
+
 
 class DataManager:
     def __init__(self, dataset_id: str):
@@ -17,8 +21,9 @@ class DataManager:
         """Downloads the data from a remote location."""
 
     @abstractmethod
-    def walk(self) -> Generator[Tuple[Any, Dict], None, None]:
+    def walk(self) -> Generator[tuple[Any, dict], None, None]:
         """Yields a tuple of (data, metadata) for each data item in the dataset."""
+
 
 class GitHubRepoManager(DataManager):
     """Class to manage a local clone of a GitHub repository."""
@@ -113,7 +118,7 @@ class GitHubRepoManager(DataManager):
             return False
         return True
 
-    def walk(self) -> Generator[Tuple[Any, Dict], None, None]:
+    def walk(self) -> Generator[tuple[Any, dict], None, None]:
         """Walks the local repository path and yields a tuple of (content, metadata) for each file.
         The filepath is relative to the root of the repository (e.g. "org/repo/your/file/path.py").
 
@@ -144,7 +149,7 @@ class GitHubRepoManager(DataManager):
                     f.write(path + "\n")
 
             for file_path in included_file_paths:
-                with open(file_path, "r") as f:
+                with open(file_path) as f:
                     try:
                         contents = f.read()
 
@@ -155,9 +160,9 @@ class GitHubRepoManager(DataManager):
                         else:
                             logging.warning("Unable to decode file %s. Skipping.", file_path)
                             continue
-                    
+
                     offset = 0 if self.local_dir.endswith("/") else 1
-                    relative_file_path = file_path[len(self.local_dir) + offset:]
+                    relative_file_path = file_path[len(self.local_dir) + offset :]
                     metadata = {
                         "file_path": relative_file_path,
                         "url": self.url_for_file(relative_file_path),
