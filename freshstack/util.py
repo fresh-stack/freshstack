@@ -4,6 +4,7 @@ import json
 import logging
 import os
 import re
+from collections import defaultdict
 from collections import Counter
 
 import py7zr
@@ -103,3 +104,68 @@ def merge_corpus(
 
     logger.info(f"Done: merged corpus written to {output_filename}")
     return output_filename
+
+def load_results_from_json(
+        results_filepath: str
+    ) -> dict:
+    results_dict = defaultdict(dict)
+    with open(os.path.join(results_filepath)) as f:
+        results = json.load(f)
+        try:
+            for item in results["data"]:
+                query_id, doc_ids, scores = str(item[0]), item[2], item[4]
+                for score, doc_id in sorted(zip(scores, doc_ids), reverse=True):
+                    if query_id not in results_dict:
+                        results_dict[query_id] = {doc_id: score}
+                    else:
+                        results_dict[query_id][doc_id] = score
+        # fusion files are in a different format
+        except TypeError:
+            for item in results:
+                query_id = item["query_id"]
+                doc_ids = item["retrieval"]["document_ids"]
+                scores = item["retrieval"]["scores"]
+                for score, doc_id in sorted(zip(scores, doc_ids), reverse=True):
+                    if query_id not in results_dict:
+                        results_dict[query_id] = {doc_id: score}
+                    else:
+                        results_dict[query_id][doc_id] = score
+    return results_dict
+
+def save_results(
+    output_file: str,
+    alpha_ndcg: dict[str, float],
+    coverage: dict[str, float],
+    recall: dict[str, float],
+    ndcg: dict[int, float] | None = None,
+    hole: dict[int, float] | None = None,
+):
+    optional_names = ["ndcg", "hole"]
+
+    with open(output_file, "w") as f:
+        results = {
+            "alpha_ndcg": alpha_ndcg,
+            "coverage": coverage,
+            "recall": recall
+        }
+
+        # Add optional metrics
+        for idx, metric in enumerate([ndcg, hole]):
+            if metric:
+                results.update({optional_names[idx]: metric})
+
+        json.dump(results, f, indent=4)
+
+    logger.info(f"Saved evaluation results to {output_file}")
+
+def save_runfile(
+    output_file: str,
+    results: dict[str, dict[str, float]],
+    run_name: str = "beir",
+    top_k: int = 1000,
+):
+    with open(output_file, "w") as fOut:
+        for qid, doc_dict in results.items():
+            sorted_docs = sorted(doc_dict.items(), key=lambda item: item[1], reverse=True)[:top_k]
+            for doc_id, score in sorted_docs:
+                fOut.write(f"{qid} Q0 {doc_id} 0 {score} {run_name}\n")
