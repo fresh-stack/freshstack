@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 import logging
-import os
 from collections import defaultdict
 
-from datasets import Features, Value, Sequence, load_dataset
+from datasets import Value, load_dataset
+
 from .util import nuggets_to_query_qrels
 
 logger = logging.getLogger(__name__)
@@ -12,6 +12,7 @@ logger = logging.getLogger(__name__)
 Topics = [
     "oct-2024",
 ]
+
 
 class DataLoader:
     def __init__(
@@ -61,7 +62,9 @@ class DataLoader:
 
         return self.corpus, self.queries, self.nuggets
 
-    def load_qrels(self, split="test") -> tuple[dict[str, dict[str, int]], dict[str, dict[str, int]], dict[str, list[str]]]:
+    def load_qrels(
+        self, split="test"
+    ) -> tuple[dict[str, dict[str, int]], dict[str, dict[str, int]], dict[str, list[str]]]:
         if not len(self.qrels_nuggets):
             logger.info(f"Loading {self.subset} Qrels...")
             self._load_nuggets_and_qrels(split)
@@ -124,7 +127,8 @@ class DataLoader:
         queries_ds = queries_ds.rename_column("query_text", "text")
         queries_ds = queries_ds.rename_column("query_title", "title")
         queries_ds = queries_ds.remove_columns(
-            [col for col in queries_ds.column_names if col not in ["id",  "text", "title"]])
+            [col for col in queries_ds.column_names if col not in ["id", "text", "title"]]
+        )
         # convert corpus_ds to a dictionary with id as key
         self.queries = {row["id"]: row.get("title", "") + " " + row["text"] for row in queries_ds}
 
@@ -140,7 +144,8 @@ class DataLoader:
         answer_ds = answer_ds.cast_column("query_id", Value("string"))
         answer_ds = answer_ds.rename_column("answer_text", "text")
         answer_ds = answer_ds.remove_columns(
-            [col for col in answer_ds.column_names if col not in ["query_id", "text"]])
+            [col for col in answer_ds.column_names if col not in ["query_id", "text"]]
+        )
         # convert corpus_ds to a dictionary with id as key
         self.answers = {row["id"]: row["text"] for row in answer_ds}
 

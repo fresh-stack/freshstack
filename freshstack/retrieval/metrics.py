@@ -84,7 +84,9 @@ def coverage(
 
     # Average the coverage for all queries
     for k in k_values:
-        Coverage[f"Coverage@{k}"] = round(sum([scores[query_id][f"Coverage@{k}"] for query_id in scores]) / len(query_to_nuggets), 4)
+        Coverage[f"Coverage@{k}"] = round(
+            sum([scores[query_id][f"Coverage@{k}"] for query_id in scores]) / len(query_to_nuggets), 4
+        )
 
     return Coverage
 

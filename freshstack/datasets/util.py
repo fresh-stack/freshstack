@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 
 def nuggets_to_query_qrels(
     qrels_nuggets: dict[str, dict[str, int]],

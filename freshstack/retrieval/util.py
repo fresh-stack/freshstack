@@ -1,6 +1,9 @@
+from __future__ import annotations
+
 import logging
 
 logger = logging.getLogger(__name__)
+
 
 def round_and_log(metric: dict[str, float], precision: int = 4) -> float:
     logger.info("\n")

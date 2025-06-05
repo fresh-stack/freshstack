@@ -4,8 +4,7 @@ import json
 import logging
 import os
 import re
-from collections import defaultdict
-from collections import Counter
+from collections import Counter, defaultdict
 
 import py7zr
 
@@ -105,9 +104,8 @@ def merge_corpus(
     logger.info(f"Done: merged corpus written to {output_filename}")
     return output_filename
 
-def load_results_from_json(
-        results_filepath: str
-    ) -> dict:
+
+def load_results_from_json(results_filepath: str) -> dict:
     results_dict = defaultdict(dict)
     with open(os.path.join(results_filepath)) as f:
         results = json.load(f)
@@ -132,6 +130,7 @@ def load_results_from_json(
                         results_dict[query_id][doc_id] = score
     return results_dict
 
+
 def save_results(
     output_file: str,
     alpha_ndcg: dict[str, float],
@@ -143,11 +142,7 @@ def save_results(
     optional_names = ["ndcg", "hole"]
 
     with open(output_file, "w") as f:
-        results = {
-            "alpha_ndcg": alpha_ndcg,
-            "coverage": coverage,
-            "recall": recall
-        }
+        results = {"alpha_ndcg": alpha_ndcg, "coverage": coverage, "recall": recall}
 
         # Add optional metrics
         for idx, metric in enumerate([ndcg, hole]):
@@ -157,6 +152,7 @@ def save_results(
         json.dump(results, f, indent=4)
 
     logger.info(f"Saved evaluation results to {output_file}")
+
 
 def save_runfile(
     output_file: str,
