@@ -1,5 +1,6 @@
 # Custom freshstack
 examples/**/results/
+examples/**/corpus/
 examples/**/convert_results_into_table.py
 examples/**/*.sh
 

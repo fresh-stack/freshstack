@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import importlib.util
 import logging
 import os
 from abc import abstractmethod
@@ -7,9 +8,15 @@ from collections.abc import Generator
 from functools import cached_property
 from typing import Any
 
-import pymupdf4llm
 import requests
-from git import GitCommandError, Repo
+
+# Ensure pymupdf4llm is installed for PDF processing
+if importlib.util.find_spec("pymupdf4llm") is not None:
+    import pymupdf4llm  # type: ignore[import]
+
+# Ensure gitpython is installed for Git operations
+if importlib.util.find_spec("git") is not None:
+    from git import GitCommandError, Repo  # type: ignore[import]
 
 
 class DataManager:

@@ -5,22 +5,42 @@ Implementation originally taken from https://github.com/Storia-AI/repo2vec.
 
 from __future__ import annotations
 
+import importlib.util
 import logging
 from abc import ABC, abstractmethod
 from collections.abc import Callable
 from dataclasses import dataclass
 from functools import cached_property
 
-import nbformat  # type: ignore
-import pygments
-import tiktoken
-from semchunk import chunk as chunk_via_semchunk  # type: ignore
+from traitlets.config import Config
 from transformers import AutoTokenizer
-from tree_sitter import Node  # type: ignore
-from tree_sitter_language_pack import get_parser  # type: ignore
+
+from .util import parse_notebook_blob, remove_embedded_media
+
+if importlib.util.find_spec("nbconvert") is not None:
+    from nbconvert import ScriptExporter
+
+# Ensure required libraries are installed
+if importlib.util.find_spec("pygments") is not None:
+    import pygments  # type: ignore[import]
+
+if importlib.util.find_spec("tiktoken") is not None:
+    import tiktoken  # type: ignore[import]
+
+    DEFAULT_TOKENIZER = tiktoken.get_encoding("cl100k_base")
+else:
+    DEFAULT_TOKENIZER = None
+
+if importlib.util.find_spec("semchunk") is not None:
+    from semchunk import chunk as chunk_via_semchunk  # type: ignore
+
+if importlib.util.find_spec("tree_sitter") is not None:
+    from tree_sitter import Node  # type: ignore[import]
+
+if importlib.util.find_spec("tree_sitter_language_pack") is not None:
+    from tree_sitter_language_pack import get_parser  # type: ignore[import]
 
 logger = logging.getLogger(__name__)
-DEFAULT_TOKENIZER = tiktoken.get_encoding("cl100k_base")
 
 # Type for tokenizer functions
 TokenizerFunc = Callable[[str], list]
@@ -85,13 +105,19 @@ class FileChunk(Chunk):
     def num_tokens(self):
         """Number of tokens in this chunk."""
         tokens = self.tokenizer_func(self.content)
+        # 1) If someone already returned an integer count
+        if isinstance(tokens, int):
+            return tokens
+        # 2) If tokenizer returns a flat list of token IDs
         if isinstance(tokens, list):
             return len(tokens)
-        elif "input_ids" in tokens:
-            # If the tokenizer returns a dict (like HuggingFace tokenizers), we assume the 'input_ids' key contains the tokens.
+        # 3) If tokenizer returns a HF-style dict with 'input_ids'
+        if isinstance(tokens, dict) and "input_ids" in tokens:
             return len(tokens["input_ids"])
-        else:
-            raise ValueError("Tokenizer function must return a list or HF tokenizer with 'input_ids' key.")
+        # Otherwise, we can’t figure it out
+        raise ValueError(
+            "Tokenizer function must return an int (count), a list of tokens, or a dict with 'input_ids'."
+        )
 
     def __eq__(self, other):
         if isinstance(other, Chunk):
@@ -239,7 +265,17 @@ class TextFileChunker(Chunker):
 
         # Set the tokenizer function
         if tokenizer_func:
-            self.count_tokens = tokenizer_func
+            # tokenizer_func *is* the function that returns a list of tokens (or HF dict)
+            def count_tokens(text: str) -> int:
+                tokens = tokenizer_func(text)
+                if isinstance(tokens, list):
+                    return len(tokens)
+                elif isinstance(tokens, dict) and "input_ids" in tokens:
+                    return len(tokens["input_ids"])
+                else:
+                    raise ValueError("TokenizerFunc must return a list or a dict with 'input_ids'")
+
+            self.count_tokens = count_tokens
         else:
             self.count_tokens = lambda text: len(DEFAULT_TOKENIZER.encode(text, disallowed_special=()))
 
@@ -285,25 +321,32 @@ class IpynbFileChunker(Chunker):
 
     def __init__(self, code_chunker: CodeFileChunker):
         self.code_chunker = code_chunker
+        self.c = Config()
+        self.c.TemplateExporter.exclude_raw = True  # this skips all cell_type=="raw"
+        self.exporter = ScriptExporter(config=self.c)
 
     def chunk(self, content, metadata: dict) -> list[Chunk]:
         filename = metadata["file_path"]
-
         if not filename.lower().endswith(".ipynb"):
             logging.warning("IPYNBChunker is only for .ipynb files.")
             return []
 
-        try:
-            notebook = nbformat.reads(content, as_version=nbformat.NO_CONVERT)
-            python_code = "\n".join([cell.source for cell in notebook.cells if cell.cell_type == "code"])
-            chunks = self.code_chunker.chunk(python_code, {**metadata, "file_path": filename.replace(".ipynb", ".py")})
-            # Change back the filenames to .ipynb.
-            for chunk in chunks:
-                chunk.file_metadata["file_path"] = chunk.file_metadata["file_path"].replace(".py", ".ipynb")
-            return chunks
-        except Exception as e:
-            logging.warning(f"Failed to parse notebook {filename}: {e}")
-            return []
+        python_code, _ = self.exporter.from_notebook_node(parse_notebook_blob(content))
+        python_code = remove_embedded_media(python_code)  # Remove embedded media like images
+        python_code = (
+            python_code.replace("%pip", "#%pip").replace("!pip", "#!pip").replace("pip", "#pip")
+        )  # Convert magic commands to comments (Important for chunking)
+        metadata["file_path"] = filename.replace(".ipynb", ".py")  # Change the file extension to .py for code chunking
+
+        # Now hand off to the code chunker
+        chunks = self.code_chunker.chunk(
+            content=python_code,
+            metadata=metadata,  # Use .py for code chunking
+        )
+        # restore the .ipynb name
+        for c in chunks:
+            c.file_metadata["file_path"] = c.file_metadata["file_path"].replace(".py", ".ipynb")
+        return chunks
 
 
 class UniversalFileChunker(Chunker):

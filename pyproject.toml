@@ -37,16 +37,23 @@ classifiers = [
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
 ]
 dependencies = [
+    "pyndeval",
+    "beir",
+    "datasets",
+]
+
+[project.optional-dependencies]
+chunking = [
     "py7zr",
     "pymupdf4llm",
     "nbformat",
+    "nbconvert",
     "pygments",
     "tiktoken",
+    "gitpython",
     "semchunk",
     "tree-sitter",
-    "tree-sitter-language-pack",
-    "pytrec-eval-terrier",
-    "datasets",
+    "tree-sitter-language-pack"
 ]
 
 [project.urls]

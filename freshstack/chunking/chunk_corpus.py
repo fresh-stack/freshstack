@@ -3,13 +3,17 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import pathlib
-import re
+import subprocess
 
-from chunker import TokenizerFunc, UniversalFileChunker
-from data_manager import GitHubRepoManager
 from tqdm.autonotebook import tqdm
+
+from .chunker import UniversalFileChunker
+from .data_manager import GitHubRepoManager
+
+logger = logging.getLogger(__name__)
 
 
 class GitHubRepoChunker:
@@ -22,7 +26,6 @@ class GitHubRepoChunker:
         repo_id: str,
         local_dir: str,
         output_dir: str,
-        tokenizer: TokenizerFunc | None = None,
         output_filename: str = "corpus.jsonl",
         included_extensions: set[str] | None = None,
         excluded_extensions: set[str] | None = None,
@@ -48,6 +51,7 @@ class GitHubRepoChunker:
         self.local_dir = local_dir
         self.output_dir = output_dir
         self.output_filename = output_filename
+        self.commit_id = None
 
         if excluded_extensions is None:
             self.excluded_extensions = {".png", ".gif", ".bin", ".jpg", ".jpeg", ".mp4", ".csv", ".json"}
@@ -69,39 +73,31 @@ class GitHubRepoChunker:
 
         self.chunker = UniversalFileChunker(max_tokens=self.max_tokens)
 
-    def _clean_content(self, content: str) -> str:
-        """
-        Clean the content by removing binary data embedded in text.
-        Args:
-            content: The content to clean
-        Returns:
-            Cleaned content
-        """
-        # Remove image data (png/jpeg) from jupyter notebook files
-        if any(keyword in content for keyword in ["image/png", "image/jpeg"]):
-            for _ in range(3):
-                pattern = r'"(?:image\/png|image\/jpeg)":\s*"([^"]*)"'
-                content = re.sub(pattern, '""', content, re.DOTALL)
-
-        # Remove base64 encoded data (video/mp4, image/jpeg, image/png, audio/x-wav)
-        if any(
-            keyword in content
-            for keyword in [
-                "data:video/mp4;base64,",
-                "data:image/jpeg;base64,",
-                "data:image/png;base64,",
-                "data:audio/x-wav;base64",
-            ]
-        ):
-            for _ in range(3):
-                pattern = r'"data:(?:video/mp4|image/jpeg|image/png|audio/x-wav);base64,([^"]+)"'
-                content = re.sub(pattern, '""', content, re.DOTALL)
-
-        return content
-
     def download(self) -> None:
         """Download the GitHub repository"""
         self.github_repo.download()
+
+    def get_latest_commit_id(self) -> str:
+        """
+        Retrieve the current HEAD commit SHA for the cloned repository.
+
+        Returns:
+            The 40-character commit SHA as a string.
+
+        Raises:
+            RuntimeError: if the git command fails or the repo path is invalid.
+        """
+        repo_path = pathlib.Path(self.local_dir) / self.repo_id
+        if not (repo_path / ".git").exists():
+            raise RuntimeError(f"No Git repository found at {repo_path}")
+
+        try:
+            # call out to git to get the current HEAD
+            sha = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=repo_path).strip().decode("utf-8")
+        except subprocess.CalledProcessError as e:
+            raise RuntimeError(f"Failed to get latest commit id: {e}")
+
+        return sha
 
     def process(self) -> str:
         """
@@ -119,56 +115,55 @@ class GitHubRepoChunker:
 
         # Process all files
         with open(output_path, "w") as fout:
-            for content, metadata in tqdm(self.github_repo.walk(), total=num_files, desc="Chunking files"):
-                # Clean content
-                content = self._clean_content(content)
-
+            for content, metadata in tqdm(
+                self.github_repo.walk(), total=num_files, desc=f"Chunking {self.repo_id}..."
+            ):
                 # Skip if content is too large
                 if len(content) >= self.max_chunk_characters:
                     continue
 
                 # Chunk the content
-                try:
-                    chunks = self.chunker.chunk(content, metadata)
+                chunks = self.chunker.chunk(content, metadata)
 
-                    # Only process if within chunk limit
-                    if len(chunks) <= self.max_chunks_allowed:
-                        for chunk in chunks:
-                            chunk_text = chunk.file_content[chunk.start_byte : chunk.end_byte]
+                # Only process if within chunk limit
+                if len(chunks) <= self.max_chunks_allowed:
+                    for chunk in chunks:
+                        chunk_text = chunk.file_content[chunk.start_byte : chunk.end_byte]
 
-                            # Skip empty chunks
-                            if chunk_text.strip() == "":
-                                continue
+                        # Skip empty chunks
+                        if chunk_text.strip() == "":
+                            continue
 
-                            # Create document
-                            document = {
-                                "_id": chunk.metadata["id"].replace(self.repo_id + "/", ""),
-                                "title": "",
-                                "text": chunk_text,
-                                "metadata": {
-                                    "url": chunk.file_metadata["url"],
-                                    "start_byte": chunk.start_byte,
-                                    "end_byte": chunk.end_byte,
-                                },
-                            }
+                        # Create document
+                        document = {
+                            "_id": chunk.metadata["id"].replace(self.repo_id + "/", ""),
+                            "title": "",
+                            "text": chunk_text,
+                            "metadata": {
+                                "url": chunk.file_metadata["url"],
+                                "start_byte": chunk.start_byte,
+                                "end_byte": chunk.end_byte,
+                                "commit_id": self.commit_id,
+                            },
+                        }
 
-                            # Write to output
-                            fout.write(json.dumps(document, ensure_ascii=False) + "\n")
-                            fout.flush()
-
-                except Exception as e:
-                    print(f"Error chunking content: {e}")
-                    continue
+                        # Write to output
+                        fout.write(json.dumps(document, ensure_ascii=False) + "\n")
+                        fout.flush()
 
         return output_path
 
-    def run(self) -> str:
+    def chunk(self) -> str:
         """
         Download and process the repository.
         Returns:
             Path to the output file
         """
+        logger.info(f"Downloading the repository {self.repo_id} to {self.local_dir}")
         self.download()
+        logger.info("Repository downloaded successfully.")
+        self.commit_id = self.get_latest_commit_id()
+        logger.info(f"Latest commit ID: {self.commit_id}")
         return self.process()
 
 
