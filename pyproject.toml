@@ -38,12 +38,20 @@ classifiers = [
 ]
 dependencies = [
     "pyndeval",
-    "beir",
+    "pytrec-eval-terrier",
     "datasets",
 ]
 
 [project.optional-dependencies]
-chunking = [
+eval = [
+    "beir",
+    "pylate",
+]
+dev = [
+    "beir",
+    "pylate",
+    "lxml",
+    "beautifulsoup4",
     "py7zr",
     "pymupdf4llm",
     "nbformat",

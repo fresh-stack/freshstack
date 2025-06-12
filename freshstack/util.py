@@ -1,17 +1,19 @@
 from __future__ import annotations
 
+import importlib.util
 import json
 import logging
 import os
 import re
 from collections import Counter, defaultdict
 
-import py7zr
+if importlib.util.find_spec("py7zr") is not None:
+    import py7zr  # type: ignore[import]
 
 logger = logging.getLogger(__name__)
 
 
-def extract_7z(archive_path, extract_to="."):
+def extract_7z(archive_path: str, extract_to: str = "."):
     """Extract a 7z archive to the specified directory."""
     with py7zr.SevenZipFile(archive_path, mode="r") as z:
         z.extractall(path=extract_to)
@@ -182,3 +184,4 @@ def save_runfile(
             sorted_docs = sorted(doc_dict.items(), key=lambda item: item[1], reverse=True)[:top_k]
             for doc_id, score in sorted_docs:
                 fOut.write(f"{qid} Q0 {doc_id} 0 {score} {run_name}\n")
+
