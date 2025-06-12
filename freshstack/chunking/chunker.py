@@ -345,6 +345,7 @@ class IpynbFileChunker(Chunker):
         )
         # restore the .ipynb name
         for c in chunks:
+            c.metadata["id"] = c.metadata["id"].replace(".py", ".ipynb")
             c.file_metadata["file_path"] = c.file_metadata["file_path"].replace(".py", ".ipynb")
         return chunks
 
