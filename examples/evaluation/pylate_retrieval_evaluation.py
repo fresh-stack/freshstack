@@ -120,26 +120,19 @@ def main():
         show_progress_bar=True,
     )
 
-    results = {query_id: {} for query_id in query_ids}
-    for query_embedding, query_id in zip(queries_embeddings, query_ids):
-        scores = retriever.retrieve(
-            queries_embeddings=[query_embedding],
-            k=max(args.k_values),  # Retrieve top-k results based on the maximum k value specified
-        )
-        for doc_id, score in scores[0]:  # scores is a list of lists
+    scores = retriever.retrieve(
+        queries_embeddings=queries_embeddings,
+        k=max(args.k_values),  # Retrieve top-k results based on the maximum k value specified
+        batch_size=1, # We have kept a batch size of 1 to avoid memory issues as 2048 tokens for query and documents can be large.
+        device="cpu", # Use CPU for inference, change to "cuda" if you have a GPU available
+    )
+
+    # Step 6: Prepare the results in the required BEIR format
+    results = {}
+    for query_id, doc_scores in zip(query_ids, scores):
+        results[query_id] = {}
+        for doc_id, score in doc_scores:
             results[query_id][doc_id] = score
-
-    # scores = retriever.retrieve(
-    #     queries_embeddings=queries_embeddings,
-    #     k=max(args.k_values),  # Retrieve top-k results based on the maximum k value specified
-    # )
-
-    # # Step 6: Prepare the results in the required BEIR format
-    # results = {}
-    # for query_id, doc_scores in zip(query_ids, scores):
-    #     results[query_id] = {}
-    #     for doc_id, score in doc_scores:
-    #         results[query_id][doc_id] = score
 
     ### Evaluate the retrieval results
     evaluator = EvaluateRetrieval(k_values=args.k_values)
