@@ -21,7 +21,15 @@
 * **Retrieval evaluation** of any dense/multi-vector model on the Freshstack repository.
 * Datasets released under **CC-BY-SA 4.0** and code and scripts under **Apache 2.0 License**.
 
-## 🚀 Quickstart
+## Installation
+
+Install via pip, tested with Python 3.10+:
+
+```python
+pip install freshstack
+```
+
+If you want to build from source, use:
 
 ```bash
 git clone https://github.com/fresh-stack/freshstack.git
@@ -29,7 +37,7 @@ cd freshstack
 pip install -e .
 ```
 
-## Load Freshstack Dataset
+## 🚀 Quickstart: Load Freshstack Dataset
 ```python
 from freshstack.datasets import DataLoader
 
@@ -45,7 +53,7 @@ corpus, queries, nuggets = dataloader.load(split="test")
 qrels_nuggets, qrels_query, query_to_nuggets = dataloader.load_qrels(split="test")
 ```
 
-## 🧪 Model Evaluation
+## 🚀 Quickstart: Model Evaluation
 
 ### 1. Evaluate only the retrieved results
 ```python
