@@ -123,8 +123,8 @@ def main():
     scores = retriever.retrieve(
         queries_embeddings=queries_embeddings,
         k=max(args.k_values),  # Retrieve top-k results based on the maximum k value specified
-        batch_size=1, # We have kept a batch size of 1 to avoid memory issues as 2048 tokens for query and documents can be large.
-        device="cpu", # Use CPU for inference, change to "cuda" if you have a GPU available
+        batch_size=1,  # We have kept a batch size of 1 to avoid memory issues as 2048 tokens for query and documents can be large.
+        device="cpu",  # Use CPU for inference, change to "cuda" if you have a GPU available
     )
 
     # Step 6: Prepare the results in the required BEIR format
