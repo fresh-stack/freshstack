@@ -19,7 +19,6 @@ class DataLoader:
         self,
         queries_repo: str = "freshstack/queries-oct-2024",
         corpus_repo: str = "freshstack/corpus-oct-2024",
-        version: str = "oct-2024",
         topic: str = None,
         keep_in_memory: bool = False,
         streaming: bool = False,
@@ -37,7 +36,6 @@ class DataLoader:
 
         self.hf_queries_repo = queries_repo
         self.hf_corpus_repo = corpus_repo
-        self.version = version
         self.subset = topic
         self.keep_in_memory = keep_in_memory
         self.streaming = streaming

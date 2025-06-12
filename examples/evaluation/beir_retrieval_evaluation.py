@@ -45,9 +45,6 @@ def main():
     parser.add_argument(
         "--corpus", type=str, default=None, help="The corpus dataset to evaluate, if different from the main dataset"
     )
-    parser.add_argument(
-        "--version", type=str, default="oct-2024", help="The version of the dataset to evaluate, default is 'oct-2024'"
-    )
     parser.add_argument("--topic", type=str, default="langchain")
     parser.add_argument(
         "--k_values", type=int, nargs="+", default=[5, 10, 20, 50], help="List of k values for evaluation metrics"
@@ -57,7 +54,7 @@ def main():
     args = parser.parse_args()
 
     ### Load the nugget qrels
-    dataloader = DataLoader(queries_repo=args.queries, corpus_repo=args.corpus, version=args.version, topic=args.topic)
+    dataloader = DataLoader(queries_repo=args.queries, corpus_repo=args.corpus, topic=args.topic)
     corpus, queries, nuggets = dataloader.load(split="test")
     qrels_nuggets, qrels_query, query_to_nuggets = dataloader.load_qrels(split="test")
 

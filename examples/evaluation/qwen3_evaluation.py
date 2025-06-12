@@ -45,9 +45,6 @@ def main():
     parser.add_argument(
         "--corpus", type=str, default=None, help="The corpus dataset to evaluate, if different from the main dataset"
     )
-    parser.add_argument(
-        "--version", type=str, default="oct-2024", help="The version of the dataset to evaluate, default is 'oct-2024'"
-    )
     parser.add_argument("--topic", type=str, default="langchain")
     parser.add_argument(
         "--k_values", type=int, nargs="+", default=[5, 10, 20, 50], help="List of k values for evaluation metrics"
@@ -57,7 +54,7 @@ def main():
     args = parser.parse_args()
 
     ### Load the nugget qrels
-    dataloader = DataLoader(queries_repo=args.queries, corpus_repo=args.corpus, version=args.version, topic=args.topic)
+    dataloader = DataLoader(queries_repo=args.queries, corpus_repo=args.corpus, topic=args.topic)
     corpus, queries, nuggets = dataloader.load(split="test")
     qrels_nuggets, qrels_query, query_to_nuggets = dataloader.load_qrels(split="test")
 
@@ -68,8 +65,7 @@ def main():
     model_name_or_path = args.model_name_or_path
     max_length = args.max_length
 
-    #### Configuration for E5-Mistral
-    # Check prompts: https://github.com/microsoft/unilm/blob/9c0f1ff7ca53431fe47d2637dfe253643d94185b/e5/utils.py
+    #### Configuration for Qwen3-embedding models
     query_prompt = "Instruct: Given a technical question, retrieve relevant code snippets or technical documentation that best answer the question\nQuery: "
     passage_prompt = ""
     dense_model = models.SentenceBERT(

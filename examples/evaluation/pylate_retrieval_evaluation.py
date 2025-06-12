@@ -6,6 +6,7 @@ Make sure you have the PyLate repository installed: `pip install pylate`.
 import argparse
 import logging
 import os
+import torch
 import pathlib
 
 from pylate import indexes, models, retrieve
@@ -42,9 +43,6 @@ def main():
     parser.add_argument(
         "--corpus", type=str, default=None, help="The corpus dataset to evaluate, if different from the main dataset"
     )
-    parser.add_argument(
-        "--version", type=str, default="oct-2024", help="The version of the dataset to evaluate, default is 'oct-2024'"
-    )
     parser.add_argument("--topic", type=str, default="langchain")
     parser.add_argument(
         "--k_values", type=int, nargs="+", default=[5, 10, 20, 50], help="List of k values for evaluation metrics"
@@ -54,7 +52,7 @@ def main():
     args = parser.parse_args()
 
     ### Load the nugget qrels
-    dataloader = DataLoader(queries_repo=args.queries, corpus_repo=args.corpus, version=args.version, topic=args.topic)
+    dataloader = DataLoader(queries_repo=args.queries, corpus_repo=args.corpus, topic=args.topic)
     corpus, queries, nuggets = dataloader.load(split="test")
     qrels_nuggets, qrels_query, query_to_nuggets = dataloader.load_qrels(split="test")
 
@@ -120,11 +118,12 @@ def main():
         show_progress_bar=True,
     )
 
+    device = "cpu" if not torch.cuda.is_available() else "cuda"
     scores = retriever.retrieve(
         queries_embeddings=queries_embeddings,
         k=max(args.k_values),  # Retrieve top-k results based on the maximum k value specified
         batch_size=1,  # We have kept a batch size of 1 to avoid memory issues as 2048 tokens for query and documents can be large.
-        device="cpu",  # Use CPU for inference, change to "cuda" if you have a GPU available
+        device=device,  # Use CPU for inference, change to "cuda" if you have a GPU available
     )
 
     # Step 6: Prepare the results in the required BEIR format

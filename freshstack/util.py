@@ -154,6 +154,23 @@ def save_results(
     logger.info(f"Saved evaluation results to {output_file}")
 
 
+def load_runfile(
+    runfile: str,
+) -> dict[str, dict[str, float]]:
+    """
+    Load a BEIR runfile and return a dictionary with query IDs as keys
+    and dictionaries of document IDs and their scores as values.
+    """
+    results = defaultdict(dict)
+    with open(runfile) as f:
+        for line in f:
+            parts = line.strip().split()
+            if len(parts) < 6:
+                continue  # Skip malformed lines
+            query_id, _, doc_id, _, score, _ = parts[:6]
+            results[query_id][doc_id] = float(score)
+    return results
+
 def save_runfile(
     output_file: str,
     results: dict[str, dict[str, float]],
