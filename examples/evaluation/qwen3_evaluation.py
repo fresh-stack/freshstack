@@ -1,6 +1,19 @@
 """
-This script shows an example on how to use evaluate a Sentence Transformer model (e.g., Stella) on FreshStack using BEIR dataset.
+This script shows an example on how to use evaluate a Sentence Transformer model (e.g., Qwen-3) on FreshStack using BEIR dataset.
 Make sure you have the BEIR repository installed: `pip install beir`.
+
+export CUDA_VISIBLE_DEVICES=0 # Set the A6000 GPU device
+for topic in langchain yolo godot angular laravel; do
+    python -m qwen3_evaluation \
+        --model_name_or_path "Qwen/Qwen3-Embedding-8B" \
+        --max_length 2048 \
+        --batch_size 16 \
+        --query_prompt "Instruct: Given a technical question, retrieve relevant code snippets or technical documentation that best answer the question\nQuery: " \
+        --queries "freshstack/queries-oct-2024" \
+        --corpus "freshstack/corpus-oct-2024" \
+        --topic $topic \
+        --output_dir "./results/qwen3_8B_results/"
+done
 """
 
 import argparse
