@@ -78,7 +78,7 @@ class DataLoader:
             logger.info(f"Loading {self.subset} Answers...")
             self._load_answers(split)
             logger.info("Loaded %d %s Answers.", len(self.answers), split.upper())
-            logger.info("Answer Example: %s", self.answers[0])
+            logger.info("Answer Example: %s", list(self.answers.items())[0])
 
         return self.answers
 
