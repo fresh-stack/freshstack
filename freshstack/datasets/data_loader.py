@@ -140,9 +140,10 @@ class DataLoader:
                 trust_remote_code=True,
             )[split]
         answer_ds = answer_ds.cast_column("query_id", Value("string"))
+        answer_ds = answer_ds.rename_column("query_id", "id")
         answer_ds = answer_ds.rename_column("answer_text", "text")
         answer_ds = answer_ds.remove_columns(
-            [col for col in answer_ds.column_names if col not in ["query_id", "text"]]
+            [col for col in answer_ds.column_names if col not in ["id", "text"]]
         )
         # convert corpus_ds to a dictionary with id as key
         self.answers = {row["id"]: row["text"] for row in answer_ds}
