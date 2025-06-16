@@ -10,7 +10,8 @@
         <a href="https://arxiv.org/abs/2504.13128">Paper</a> |
         <a href="https://fresh-stack.github.io/">Website</a> |
         <a href="https://fresh-stack.github.io/#leaderboard">Leaderboard</a> |
-        <a href="https://huggingface.co/freshstack">Dataset</a>
+        <a href="https://huggingface.co/freshstack">Dataset</a> |
+        <a href="https://colab.research.google.com/drive/1HfutiEhHMJLXiWGT8pcipxT5L2TpYEdt?usp=sharing">Google Colab</a>
     <p>
 </h4>
 

@@ -1,6 +1,6 @@
 [project]
 name = "freshstack"
-version = "0.0.1"
+version = "0.0.5"
 description = "A framework to generate realistic IR & RAG Benchmarks."
 license = { text = "Apache License 2.0" }
 readme = "README.md"
@@ -67,7 +67,7 @@ dev = [
 [project.urls]
 Homepage = "https://fresh-stack.github.io/"
 Repository = "https://github.com/fresh-stack/freshstack"
-Download = "https://github.com/fresh-stack/freshstack/archive/v0.0.1.zip"
+Download = "https://github.com/fresh-stack/freshstack/archive/v0.0.5.zip"
 
 [build-system]
 requires = ["setuptools>=42", "wheel"]
