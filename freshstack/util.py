@@ -5,6 +5,7 @@ import json
 import logging
 import os
 import re
+import numpy as np
 from collections import Counter, defaultdict
 
 if importlib.util.find_spec("py7zr") is not None:
@@ -106,32 +107,46 @@ def merge_corpus(
     logger.info(f"Done: merged corpus written to {output_filename}")
     return output_filename
 
+def fusion(
+    results_list: list[dict[str, dict[str, float]]],
+    method: str = "normalized_sum",
+    depth: int = 50) -> dict[str, dict[str, float]]:
+    """
+    Fuse multiple retrieval results using the specified fusion method.
 
-def load_results_from_json(results_filepath: str) -> dict:
-    results_dict = defaultdict(dict)
-    with open(os.path.join(results_filepath)) as f:
-        results = json.load(f)
-        try:
-            for item in results["data"]:
-                query_id, doc_ids, scores = str(item[0]), item[2], item[4]
-                for score, doc_id in sorted(zip(scores, doc_ids), reverse=True):
-                    if query_id not in results_dict:
-                        results_dict[query_id] = {doc_id: score}
-                    else:
-                        results_dict[query_id][doc_id] = score
-        # fusion files are in a different format
-        except TypeError:
-            for item in results:
-                query_id = item["query_id"]
-                doc_ids = item["retrieval"]["document_ids"]
-                scores = item["retrieval"]["scores"]
-                for score, doc_id in sorted(zip(scores, doc_ids), reverse=True):
-                    if query_id not in results_dict:
-                        results_dict[query_id] = {doc_id: score}
-                    else:
-                        results_dict[query_id][doc_id] = score
-    return results_dict
+    Args:
+        results_list: List of retrieval results dictionaries to fuse.
+        method: Fusion method to use. Currently supports 'reciprocal_rank_fusion'.
+        depth: Depth of documents to consider for fusion from each set.
 
+    Returns:
+        A fused retrieval results dictionary.
+    """
+    fused_results = {}
+
+    if method == "normalized_sum":
+        for results in results_list:
+            for query_id, doc_scores in results.items():
+                doc_ids = list(doc_scores.keys())[:depth]
+
+                # Normalize the scores and sum them up
+                scores = np.array(list(doc_scores.values())[:depth])
+                scores = (scores - scores.min()) / (scores.max() - scores.min() + 1e-8)
+
+                for score, doc_id in sorted(zip(list(scores), doc_ids), reverse=True):
+                    if query_id not in fused_results:
+                        fused_results[query_id] = {doc_id: float(score)}
+                    elif doc_id not in fused_results[query_id]:
+                        fused_results[query_id][doc_id] = float(score)
+                    else:
+                        fused_results[query_id][doc_id] += float(score)
+    else:
+        raise ValueError(f"Unsupported fusion method: {method}")
+
+    for query_id in fused_results:
+        fused_results[query_id] = {doc_id: round(score, 3) for doc_id, score in sorted(fused_results[query_id].items(), key=lambda x: x[1], reverse=True)}
+
+    return fused_results
 
 def save_results(
     output_file: str,
@@ -160,16 +175,21 @@ def load_runfile(
     runfile: str,
 ) -> dict[str, dict[str, float]]:
     """
-    Load a BEIR runfile and return a dictionary with query IDs as keys
+    Load a TREC runfile and return a dictionary with query IDs as keys
     and dictionaries of document IDs and their scores as values.
     """
     results = defaultdict(dict)
     with open(runfile) as f:
         for line in f:
             parts = line.strip().split()
-            if len(parts) < 6:
-                continue  # Skip malformed lines
-            query_id, _, doc_id, _, score, _ = parts[:6]
+            # there are document ids with spaces in them
+            if len(parts) >= 7:
+                query_id = parts[0]
+                score = parts[-2]
+                doc_id = " ".join(parts[2:-3])
+            else:
+                query_id, _, doc_id, _, score, _ = parts[:6]
+
             results[query_id][doc_id] = float(score)
     return results
 
