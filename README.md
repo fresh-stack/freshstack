@@ -42,7 +42,7 @@ pip install -e .
 ```python
 from freshstack.datasets import DataLoader
 
-freshstack_dataloader = DataLoader(
+dataloader = DataLoader(
     queries_repo="freshstack/queries-oct-2024", 
     corpus_repo="freshstack/corpus-oct-2024",
     topic="langchain") # or "yolo", "angular", "laravel" or "godot"
