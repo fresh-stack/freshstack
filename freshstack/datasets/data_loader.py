@@ -101,7 +101,6 @@ class DataLoader:
                 self.subset,
                 keep_in_memory=self.keep_in_memory,
                 streaming=self.streaming,
-                trust_remote_code=True,
             )["train"]
         corpus_ds = corpus_ds.cast_column("_id", Value("string"))
         corpus_ds = corpus_ds.rename_column("_id", "id")
@@ -118,7 +117,6 @@ class DataLoader:
                 self.subset,
                 keep_in_memory=self.keep_in_memory,
                 streaming=self.streaming,
-                trust_remote_code=True,
             )[split]
         queries_ds = queries_ds.cast_column("query_id", Value("string"))
         queries_ds = queries_ds.rename_column("query_id", "id")
@@ -137,7 +135,6 @@ class DataLoader:
                 self.subset,
                 keep_in_memory=self.keep_in_memory,
                 streaming=self.streaming,
-                trust_remote_code=True,
             )[split]
         answer_ds = answer_ds.cast_column("query_id", Value("string"))
         answer_ds = answer_ds.rename_column("query_id", "id")
@@ -155,7 +152,6 @@ class DataLoader:
                 self.subset,
                 keep_in_memory=self.keep_in_memory,
                 streaming=self.streaming,
-                trust_remote_code=True,
             )[split]
 
         for nugget_list in qrels_ds["nuggets"]:
