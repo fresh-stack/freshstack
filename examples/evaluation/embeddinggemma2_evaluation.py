@@ -16,8 +16,8 @@ document has an empty title, which is what the "title: none" document prompt is 
 Inference runs in bfloat16; the card warns that float16 silently returns NaN or degraded
 embeddings because the activation range exceeds its dynamic range.
 
-The 2048-token limit matches the other models in results/embedding_comparison.csv rather
-than the model's full 8K window, so the comparison stays like-for-like.
+The 2048-token limit matches the other FreshStack embedding runs rather than the model's
+full 8K window, so the comparison stays like-for-like.
 
 python examples/evaluation/embeddinggemma2_evaluation.py --batch_size 16
 """
@@ -25,7 +25,6 @@ python examples/evaluation/embeddinggemma2_evaluation.py --batch_size 16
 from __future__ import annotations
 
 import argparse
-import csv
 import hashlib
 import json
 import logging
@@ -35,7 +34,6 @@ from importlib.metadata import version
 from pathlib import Path
 
 import torch
-from batch_tuning import tune_batch_size
 from beir import LoggingHandler
 from beir.retrieval.evaluation import EvaluateRetrieval as BEIREval
 from beir.retrieval.models.util import extract_corpus_sentences
@@ -203,52 +201,9 @@ def check_encoder(encoder: RetrievalEncoder) -> None:
     )
 
 
-def write_comparison(results_root: Path) -> None:
-    """Rewrite the shared comparison table, appending this model's rows."""
-    entries = {
-        "nvidia/Nemotron-3-Embed-1B-BF16": "nemotron3_1B_results",
-        "nvidia/Nemotron-3-Embed-8B-BF16": "nemotron3_8B_results",
-        "Octen/Octen-Embedding-8B": "octen_8B_results",
-        "Octen/Octen-Embedding-4B": "octen_4B_results",
-        "Octen/Octen-Embedding-0.6B": "octen_0.6B_results",
-        "zeroentropy/zembed-1-embedding": "zembed_1_results",
-        MODEL_ID: OUTPUT_NAME,
-    }
-    rows = []
-    for model_id, directory in entries.items():
-        model_rows = []
-        for topic in TOPICS:
-            path = results_root / directory / f"{topic}.json"
-            if not path.is_file():
-                continue
-            metrics = json.loads(path.read_text())
-            model_rows.append({
-                "model": model_id,
-                "topic": topic,
-                "alpha-nDCG@10": metrics["alpha_ndcg"]["alpha-nDCG@10"],
-                "Coverage@20": metrics["coverage"]["Coverage@20"],
-                "Recall@50": metrics["recall"]["Recall@50"],
-            })
-        rows.extend(model_rows)
-        if len(model_rows) == len(TOPICS):
-            rows.append({
-                "model": model_id,
-                "topic": "AVERAGE",
-                **{key: round(sum(row[key] for row in model_rows) / len(TOPICS), 4)
-                   for key in ("alpha-nDCG@10", "Coverage@20", "Recall@50")},
-            })
-    temporary = results_root / "embedding_comparison.csv.tmp"
-    with temporary.open("w", newline="") as handle:
-        writer = csv.DictWriter(handle, fieldnames=["model", "topic", "alpha-nDCG@10", "Coverage@20", "Recall@50"])
-        writer.writeheader()
-        writer.writerows(rows)
-    temporary.replace(results_root / "embedding_comparison.csv")
-
-
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--batch_size", type=int, default=16)
-    parser.add_argument("--auto_batch_size", action=argparse.BooleanOptionalAction, default=True)
     parser.add_argument("--query_prompt", choices=QUERY_PROMPTS, default="CodeRetrieval")
     parser.add_argument("--cache_dir", type=Path, default=Path.home() / "huggingface-cache")
     parser.add_argument("--results_root", type=Path, default=Path(__file__).resolve().parents[2] / "results")
@@ -274,9 +229,6 @@ def main():
         return
     output_dir = args.results_root / (args.output_name or OUTPUT_NAME)
     output_dir.mkdir(parents=True, exist_ok=True)
-    measurements = []
-    if args.auto_batch_size:
-        args.batch_size, measurements = tune_batch_size(encoder, args.batch_size, MAX_LENGTH)
     manifest = {
         "model": MODEL_ID,
         "revision": REVISION,
@@ -296,7 +248,6 @@ def main():
         "input_modality": "text",
         "media_placeholders": "literal <|image|>/<|video|>/<|audio|> strings softened to <image>/<video>/<audio>",
         "batch_size": args.batch_size,
-        "batch_tuning": measurements,
         "score_function": "cos_sim",
         "topics": args.topics,
         "queries": "freshstack/queries-oct-2024",
@@ -322,7 +273,6 @@ def main():
         )
         util.save_runfile(str(output_dir / f"{topic}.run.trec"), results)
         util.save_results(str(output_dir / f"{topic}.json"), alpha_ndcg, coverage, recall)
-        write_comparison(args.results_root)
         LOGGER.info("Completed %s on %s", MODEL_ID, topic)
     LOGGER.info("All requested topics complete for %s", MODEL_ID)
 

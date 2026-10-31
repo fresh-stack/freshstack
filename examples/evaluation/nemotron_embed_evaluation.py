@@ -1,5 +1,8 @@
 """
-Evaluate NVIDIA Nemotron-3.5-Embed (1B / 8B, BF16) on FreshStack text retrieval using BEIR.
+Evaluate NVIDIA Nemotron-3-Embed and Nemotron-3.5-Embed (1B / 8B, BF16) on FreshStack using BEIR.
+
+Nemotron-3 checkpoints are SentenceTransformers models; their saved "query" / "document"
+prompts are applied through encode_query / encode_document (left padding).
 
 Nemotron-3.5 checkpoints are multimodal (Pixtral vision encoder + Nemotron-3 language model), and
 their reference usage formats every input with the checkpoint's chat template:
@@ -7,12 +10,13 @@ their reference usage formats every input with the checkpoint's chat template:
 The template joins the prefix and text with one space, escapes "[" and "<" in user text with a
 zero-width non-joiner, and adds no BOS/EOS. Token states are mean-pooled and L2-normalized.
 
-Requires CUDA-enabled PyTorch and `pip install beir "transformers>=5.19" pillow`.
+Requires CUDA-enabled PyTorch and
+`pip install beir "transformers>=5.19" "sentence-transformers>=5.4.1" pillow`.
 Use `--attn_implementation flash_attention_2` if FlashAttention-2 is installed.
 
 export CUDA_VISIBLE_DEVICES=0
 for topic in langchain yolo godot angular laravel; do
-    python examples/evaluation/nemotron35_evaluation.py \
+    python examples/evaluation/nemotron_embed_evaluation.py \
         --model_name_or_path "nvidia/Nemotron-3.5-Embed-1B-BF16" \
         --max_length 2048 \
         --batch_size 16 \
@@ -33,8 +37,8 @@ from datetime import datetime, timezone
 import torch
 import torch.nn.functional as F
 import transformers
-from batch_tuning import tune_batch_size
 from beir import LoggingHandler
+from beir.retrieval import models
 from beir.retrieval.evaluation import EvaluateRetrieval as BEIREval
 from beir.retrieval.models.sentence_bert import extract_corpus_sentences
 from beir.retrieval.search.dense import DenseRetrievalExactSearch as DRES
@@ -141,15 +145,15 @@ def check_pipeline(encoder):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Evaluate Nemotron-3.5 embeddings on FreshStack")
+    parser = argparse.ArgumentParser(description="Evaluate Nemotron-3 / 3.5 embeddings on FreshStack")
     parser.add_argument("--model_name_or_path", type=str, default="nvidia/Nemotron-3.5-Embed-1B-BF16")
     parser.add_argument("--cache_dir", type=str, default=str(pathlib.Path.home() / "huggingface-cache"))
     parser.add_argument(
-        "--max_length", type=int, default=2048, help="Maximum tokens for queries and documents, including the prefix"
+        "--max_length", type=int, default=2048, help="Maximum tokens for queries and documents, including the prompt"
     )
     parser.add_argument("--batch_size", type=int, default=16)
-    parser.add_argument("--query_prefix", type=str, default="query:")
-    parser.add_argument("--document_prefix", type=str, default="passage:")
+    parser.add_argument("--query_prefix", type=str, default="query:", help="Nemotron-3.5 only")
+    parser.add_argument("--document_prefix", type=str, default="passage:", help="Nemotron-3.5 only")
     parser.add_argument("--attn_implementation", choices=["flash_attention_2", "sdpa"], default="sdpa")
     parser.add_argument("--score_function", type=str, default="cos_sim")
     parser.add_argument("--queries", type=str, required=True)
@@ -157,7 +161,6 @@ def main():
     parser.add_argument("--topic", type=str, default="langchain")
     parser.add_argument("--k_values", type=int, nargs="+", default=[5, 10, 20, 50])
     parser.add_argument("--output_dir", type=str, default=None)
-    parser.add_argument("--auto_batch_size", action=argparse.BooleanOptionalAction, default=True)
     args = parser.parse_args()
 
     cache_dir = pathlib.Path(args.cache_dir).expanduser().resolve()
@@ -169,38 +172,43 @@ def main():
     corpus, queries, nuggets = dataloader.load(split="test")
     qrels_nuggets, qrels_query, query_to_nuggets = dataloader.load_qrels(split="test")
 
-    encoder = Nemotron35TextEncoder(
-        args.model_name_or_path, str(cache_dir), args.max_length,
-        args.query_prefix, args.document_prefix, args.attn_implementation,
-    )
-    check_pipeline(encoder)
-
-    if args.auto_batch_size:
-        args.batch_size, measurements = tune_batch_size(encoder, args.batch_size, args.max_length)
-        pathlib.Path(results_dir, f"{args.topic}.batch_tuning.json").write_text(
-            json.dumps({"selected_batch_size": args.batch_size, "measurements": measurements}, indent=2) + "\n"
+    if "Nemotron-3.5" in args.model_name_or_path:
+        encoder = Nemotron35TextEncoder(
+            args.model_name_or_path, str(cache_dir), args.max_length,
+            args.query_prefix, args.document_prefix, args.attn_implementation,
         )
-
-    configuration = {
-        "model": args.model_name_or_path,
-        "revision": encoder.revision,
-        "parameters": sum(p.numel() for p in encoder.model.parameters()),
-        "max_length": args.max_length,
-        "prefixes": {"query": args.query_prefix, "document": args.document_prefix},
-        "input_format": "checkpoint chat template (system prefix + user text), no BOS/EOS",
-        "document_text": "title + ' ' + text, stripped",
-        "pooling": "mean over attention mask, L2-normalized",
-        "dtype": "bfloat16",
-        "attention": args.attn_implementation,
-        "batch_size": args.batch_size,
-        "score_function": args.score_function,
-        "queries": args.queries,
-        "corpus": args.corpus,
-        "gpu": torch.cuda.get_device_name(0),
-        "versions": {"torch": torch.__version__, "transformers": transformers.__version__},
-        "started_at": datetime.now(timezone.utc).isoformat(),
-    }
-    pathlib.Path(results_dir, "configuration.json").write_text(json.dumps(configuration, indent=2) + "\n")
+        check_pipeline(encoder)
+        configuration = {
+            "model": args.model_name_or_path,
+            "revision": encoder.revision,
+            "parameters": sum(p.numel() for p in encoder.model.parameters()),
+            "max_length": args.max_length,
+            "prefixes": {"query": args.query_prefix, "document": args.document_prefix},
+            "input_format": "checkpoint chat template (system prefix + user text), no BOS/EOS",
+            "document_text": "title + ' ' + text, stripped",
+            "pooling": "mean over attention mask, L2-normalized",
+            "dtype": "bfloat16",
+            "attention": args.attn_implementation,
+            "batch_size": args.batch_size,
+            "score_function": args.score_function,
+            "queries": args.queries,
+            "corpus": args.corpus,
+            "gpu": torch.cuda.get_device_name(0),
+            "versions": {"torch": torch.__version__, "transformers": transformers.__version__},
+            "started_at": datetime.now(timezone.utc).isoformat(),
+        }
+        pathlib.Path(results_dir, "configuration.json").write_text(json.dumps(configuration, indent=2) + "\n")
+    else:
+        # BEIR calls encode(), so select the saved prompts used by encode_query/encode_document explicitly.
+        encoder = models.SentenceBERT(
+            args.model_name_or_path,
+            max_length=args.max_length,
+            cache_folder=str(cache_dir),
+            prompt_names={"query": "query", "passage": "document"},
+            device="cuda",
+            model_kwargs={"dtype": torch.bfloat16, "attn_implementation": args.attn_implementation},
+            processor_kwargs={"padding_side": "left"},
+        )
 
     retriever = BEIREval(DRES(encoder, batch_size=args.batch_size), score_function=args.score_function)
     results = retriever.retrieve(corpus=corpus, queries=queries)

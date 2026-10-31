@@ -1,19 +1,16 @@
 """
-Evaluate late-interaction (ColBERT-style) multi-vector models on all five FreshStack topics:
-perplexity-ai/pplx-embed-v2-late-{0.6b,9b}, lightonai/LateOn and lightonai/mLateOn.
+Evaluate lightonai/LateOn (late interaction) on all five FreshStack topics.
 
 Every token gets a 128-dimensional normalized vector, and a query-document score is MaxSim,
-the sum over query tokens of the best-matching document token. All checkpoints load as
-SentenceTransformers MultiVectorEncoder pipelines (Transformer, Dense layers -> 128,
-MultiVectorMask, Normalize) with no remote code, and their saved "[Q] " / "[D] " markers are
-used. pplx expects the marker as the very first token; the PyLate-trained LightOn models
-expect it right after [CLS] / <bos>, which is how SentenceTransformers loads their saved
-query_prefix / document_prefix. MultiVectorMask drops punctuation tokens on the document
-side only (pplx and LateOn; mLateOn ships an empty skiplist).
+the sum over query tokens of the best-matching document token. The checkpoint loads as a
+SentenceTransformers MultiVectorEncoder pipeline (Transformer, Dense layers -> 128,
+MultiVectorMask, Normalize) with no remote code, and its saved "[Q] " / "[D] " markers are
+used. The PyLate-trained model expects the marker right after [CLS], which is how
+SentenceTransformers loads its saved query_prefix / document_prefix. MultiVectorMask drops
+punctuation tokens on the document side only.
 
-Both sides are truncated at 2048 tokens to match the other models in
-results/embedding_comparison.csv, instead of each checkpoint's own query/document lengths
-(pplx 1024/4096, LateOn 32/300, mLateOn 8192/8192).
+Both sides are truncated at 2048 tokens to match the other FreshStack embedding runs,
+instead of the checkpoint's own query/document lengths (32/300).
 
 Retrieval is exact and exhaustive: every query is scored against every document with
 full MaxSim on the GPU (no PLAID or other approximate index), and the top 1000 are kept.
@@ -21,14 +18,7 @@ Document token embeddings are stored as float16 shards under
 <output_dir>/embeddings/<topic>/, so an interrupted run resumes without re-encoding.
 bfloat16 to float16 conversion is lossless for these normalized vectors.
 
-The pplx Qwen3.5 backbone mixes Gated DeltaNet linear-attention layers with full attention.
-flash-linear-attention supplies the fast kernel for the delta rule. Without it,
-transformers falls back to a much slower reference PyTorch path.
-
-python examples/evaluation/late_interaction_evaluation.py --model pplx-0.6b --batch_size 64
-python examples/evaluation/late_interaction_evaluation.py --model pplx-9b --batch_size 8
-python examples/evaluation/late_interaction_evaluation.py --model lateon --batch_size 64
-python examples/evaluation/late_interaction_evaluation.py --model mlateon --batch_size 64
+python examples/evaluation/lateon_evaluation.py --batch_size 64
 """
 
 from __future__ import annotations
@@ -66,14 +56,8 @@ class LateModel:
 
 
 MODELS = {
-    "pplx-0.6b": LateModel("perplexity-ai/pplx-embed-v2-late-0.6b", "8fc2de24534aa3610d85fa59c463313a5f096455",
-                           "pplx_embed_v2_late_0.6b_results", 0, 1, True, True),
-    "pplx-9b": LateModel("perplexity-ai/pplx-embed-v2-late-9b", "0f49a9977fe06b83377d598094c5c0204ce18ad9",
-                         "pplx_embed_v2_late_9b_results", 0, 1, True, True),
     "lateon": LateModel("lightonai/LateOn", "62911e105059585d244384c7d17826e35f669c17",
                         "lateon_results", 1, 3, True, False),
-    "mlateon": LateModel("lightonai/mLateOn", "bbd883ae1fadb563056ff73b1061ae8172a3fcda",
-                         "mlateon_results", 1, 3, False, False),
 }
 MAX_LENGTH = 2048
 DIMENSION = 128
@@ -243,7 +227,7 @@ def check_search(model: MultiVectorEncoder, queries: list[torch.Tensor], tokens,
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--model", choices=MODELS, required=True)
+    parser.add_argument("--model", choices=MODELS, default="lateon")
     parser.add_argument("--batch_size", type=int, default=16)
     parser.add_argument("--token_budget", type=int, default=32768, help="Document tokens per scoring matmul")
     parser.add_argument("--cache_dir", type=Path, default=Path.home() / "huggingface-cache")

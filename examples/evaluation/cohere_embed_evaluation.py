@@ -11,7 +11,7 @@ float32 .npy chunks (row order given by query_ids.json / corpus_ids.json). The c
 as a resume cache, so an interrupted run does not re-embed (and re-bill) finished chunks.
 
 export COHERE_API_KEY=...
-python examples/evaluation/cohere_evaluation.py --model embed-v5.0-pro
+python examples/evaluation/cohere_embed_evaluation.py --model embed-v5.0-pro
 """
 
 from __future__ import annotations
@@ -30,7 +30,6 @@ from pathlib import Path
 import cohere
 import numpy as np
 import torch
-from additional_evaluation import write_comparison
 from beir import LoggingHandler
 from beir.retrieval.models.util import extract_corpus_sentences
 from cohere.core.api_error import ApiError
@@ -204,7 +203,6 @@ def main():
         )
         util.save_runfile(str(output_dir / f"{topic}.run.trec"), results)
         util.save_results(str(output_dir / f"{topic}.json"), alpha_ndcg, coverage, recall)
-        write_comparison(args.results_root)
         LOGGER.info("Completed %s on %s (%d billed tokens this run)", args.model, topic, embedder.input_tokens)
     LOGGER.info("All requested topics complete for %s", args.model)
 
