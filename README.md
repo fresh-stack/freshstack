@@ -178,6 +178,61 @@ alpha_ndcg, coverage, recall = evaluator.evaluate(
     results=retrieval_results,
 )
 ```
+
+### 4. Evaluate any OpenAI-compatible embedding API (e.g., Voyage) using the OpenAI SDK.
+> Make sure you install the OpenAI SDK: `pip install openai`, and export your provider key, e.g. `export VOYAGE_API_KEY=<your_key>`.
+
+```python
+import os
+
+import numpy as np
+from openai import OpenAI
+from beir.retrieval.evaluation import EvaluateRetrieval as BEIREval
+from beir.retrieval.search.dense import DenseRetrievalExactSearch as DRES
+from freshstack.retrieval.evaluation import EvaluateRetrieval
+
+# Works with Voyage, OpenAI, OpenRouter, Mistral, etc. Asymmetric models
+# (Voyage/Cohere) send an optional `input_type` via extra_body.
+class OpenAIEmbeddingModel:
+    def __init__(self, model, base_url, api_key_env, query_input_type=None, document_input_type=None):
+        self.model = model
+        self.query_input_type = query_input_type
+        self.document_input_type = document_input_type
+        self.client = OpenAI(base_url=base_url, api_key=os.environ[api_key_env])
+
+    def _embed(self, texts, input_type):
+        extra_body = {"input_type": input_type} if input_type else {}
+        resp = self.client.embeddings.create(model=self.model, input=texts, extra_body=extra_body)
+        return np.asarray([d.embedding for d in sorted(resp.data, key=lambda x: x.index)], dtype=np.float32)
+
+    def encode_queries(self, queries, batch_size=128, **kwargs):
+        return self._embed(queries, self.query_input_type)
+
+    def encode_corpus(self, corpus, batch_size=128, **kwargs):
+        texts = [(d.get("title", "") + " " + d.get("text", "")).strip() for d in corpus]
+        return self._embed(texts, self.document_input_type)
+
+model = DRES(OpenAIEmbeddingModel(
+    model="voyage-4-large",
+    base_url="https://api.voyageai.com/v1",
+    api_key_env="VOYAGE_API_KEY",
+    query_input_type="query",
+    document_input_type="document",
+), batch_size=128)
+
+retriever = BEIREval(model, score_function="cos_sim")
+retrieval_results = retriever.retrieve(corpus=corpus, queries=queries)
+
+evaluator = EvaluateRetrieval(k_values=[10, 20, 50])
+alpha_ndcg, coverage, recall = evaluator.evaluate(
+    qrels_nuggets=qrels_nuggets,
+    query_to_nuggets=query_to_nuggets,
+    qrels_query=qrels_query,
+    results=retrieval_results,
+)
+```
+> See [`examples/evaluation/api_retrieval_evaluation.py`](examples/evaluation/api_retrieval_evaluation.py) for a runnable CLI (batching + retries) that loops over all five topics.
+
 ---
 
 ## 📚 Raw Freshstack Datasets (Oct 2024)

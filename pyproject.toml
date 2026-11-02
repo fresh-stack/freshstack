@@ -46,6 +46,7 @@ dependencies = [
 eval = [
     "beir",
     "pylate",
+    "openai",
 ]
 dev = [
     "beir",
